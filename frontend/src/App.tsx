@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { 
   LayoutDashboard, GitMerge, FileText, 
   Building2, BarChart3, Bell, Moon, Sun, 
-  Globe, Shield, LogOut
+  Globe, Shield, LogOut, Menu, X
 } from 'lucide-react';
 import { DashboardView } from './components/DashboardView';
 import { OverlapCenterView } from './components/OverlapCenterView';
@@ -21,6 +21,7 @@ export function App() {
   const [activeTab, setActiveTab] = useState<'dashboard' | 'overlaps' | 'cases' | 'institutions' | 'reports'>('dashboard');
   const [theme, setTheme] = useState<'light' | 'dark'>('light');
   const [lang, setLang] = useState<'en' | 'hi'>('en');
+  const [mobileMenuOpen, setMobileMenuOpen] = useState<boolean>(false);
 
   // Authentication & Session (Feature 7)
   const [isAuthenticated, setIsAuthenticated] = useState<boolean>(() => {
@@ -212,8 +213,8 @@ export function App() {
             </div>
           </div>
 
-          {/* Navigation Links */}
-          <div className="nav-links">
+          {/* Desktop Navigation Links */}
+          <div className="nav-links nav-links-desktop">
             <button 
               className={`nav-item ${activeTab === 'dashboard' ? 'active' : ''}`}
               onClick={() => setActiveTab('dashboard')}
@@ -260,8 +261,8 @@ export function App() {
             </button>
           </div>
 
-          {/* Persona Switcher & Tooling (Feature 7 & 5) */}
-          <div className="nav-actions">
+          {/* Desktop Persona Switcher & Tooling */}
+          <div className="nav-actions nav-actions-desktop">
             {/* Persona Dropdown (Demo Shortcut) */}
             <div className="persona-selector">
               <span style={{ fontSize: '0.72rem', color: 'var(--text-muted)' }}>{t.roleLabel}</span>
@@ -331,7 +332,154 @@ export function App() {
               <LogOut size={18} />
             </button>
           </div>
+
+          {/* Mobile Header Actions (Alerts Bell + Hamburger) */}
+          <div className="mobile-header-actions">
+            <button 
+              className="icon-btn" 
+              onClick={() => setShowAlertsModal(true)}
+              title="Alerts Center"
+              style={{ position: 'relative' }}
+            >
+              <Bell size={18} />
+              {unreadAlertsCount > 0 && (
+                <span 
+                  style={{ 
+                    position: 'absolute', 
+                    top: '-2px', 
+                    right: '-2px', 
+                    background: 'var(--status-red)', 
+                    color: '#ffffff', 
+                    borderRadius: '50%', 
+                    width: '16px', 
+                    height: '16px', 
+                    fontSize: '0.62rem', 
+                    fontWeight: 700, 
+                    display: 'flex', 
+                    alignItems: 'center', 
+                    justifyContent: 'center'
+                  }}
+                >
+                  {unreadAlertsCount > 99 ? '99+' : unreadAlertsCount}
+                </span>
+              )}
+            </button>
+
+            <button 
+              className="icon-btn mobile-toggle-btn"
+              onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
+              title="Open Navigation Menu"
+            >
+              {mobileMenuOpen ? <X size={20} /> : <Menu size={20} />}
+            </button>
+          </div>
         </div>
+
+        {/* Mobile Swipeable Tab Scroll Navigation */}
+        <div className="mobile-tab-scroll">
+          <button 
+            className={`mobile-tab-pill ${activeTab === 'dashboard' ? 'active' : ''}`}
+            onClick={() => { setActiveTab('dashboard'); setMobileMenuOpen(false); }}
+          >
+            <LayoutDashboard size={14} />
+            {t.dashboard}
+          </button>
+
+          <button 
+            className={`mobile-tab-pill ${activeTab === 'overlaps' ? 'active' : ''}`}
+            onClick={() => { setActiveTab('overlaps'); setMobileMenuOpen(false); }}
+          >
+            <GitMerge size={14} />
+            {t.overlapCenter}
+            {activeOverlapsTotal > 0 && (
+              <span className="nav-badge-pill" style={{ background: 'var(--status-red)', color: '#ffffff' }}>
+                {activeOverlapsTotal}
+              </span>
+            )}
+          </button>
+
+          <button 
+            className={`mobile-tab-pill ${activeTab === 'cases' ? 'active' : ''}`}
+            onClick={() => { setActiveTab('cases'); setMobileMenuOpen(false); }}
+          >
+            <FileText size={14} />
+            {t.casesTracker}
+          </button>
+
+          <button 
+            className={`mobile-tab-pill ${activeTab === 'institutions' ? 'active' : ''}`}
+            onClick={() => { setActiveTab('institutions'); setMobileMenuOpen(false); }}
+          >
+            <Building2 size={14} />
+            {t.institution360}
+          </button>
+
+          <button 
+            className={`mobile-tab-pill ${activeTab === 'reports' ? 'active' : ''}`}
+            onClick={() => { setActiveTab('reports'); setMobileMenuOpen(false); }}
+          >
+            <BarChart3 size={14} />
+            {t.reports}
+          </button>
+        </div>
+
+        {/* Mobile Dropdown Panel for Role Switching & Settings */}
+        {mobileMenuOpen && (
+          <div className="mobile-dropdown-menu">
+            <div className="mobile-user-profile">
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <span className="brand-tag">{currentPersona.bureau}</span>
+                <strong style={{ fontSize: '0.88rem' }}>{currentPersona.name}</strong>
+              </div>
+              <span style={{ fontSize: '0.74rem', color: 'var(--text-muted)' }}>{currentPersona.role}</span>
+            </div>
+
+            <div style={{ marginTop: '10px' }}>
+              <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)', fontWeight: 600 }}>{t.roleLabel}</span>
+              <select 
+                className="persona-select" 
+                style={{ width: '100%', marginTop: '6px', padding: '8px', background: 'var(--bg-secondary)', borderRadius: 'var(--radius-sm)' }}
+                value={currentPersona.id}
+                onChange={(e) => {
+                  handlePersonaChange(e.target.value);
+                  setMobileMenuOpen(false);
+                }}
+              >
+                {personas.map((p) => (
+                  <option key={p.id} value={p.id}>{p.name} ({p.bureau})</option>
+                ))}
+              </select>
+            </div>
+
+            <div style={{ display: 'flex', gap: '8px', marginTop: '12px' }}>
+              <button 
+                className="btn-secondary" 
+                style={{ flex: 1, justifyContent: 'center', fontSize: '0.78rem', padding: '8px' }}
+                onClick={toggleTheme}
+              >
+                {theme === 'light' ? <Moon size={14} /> : <Sun size={14} />}
+                {theme === 'light' ? 'Dark Mode' : 'Light Mode'}
+              </button>
+
+              <button 
+                className="btn-secondary" 
+                style={{ flex: 1, justifyContent: 'center', fontSize: '0.78rem', padding: '8px' }}
+                onClick={toggleLang}
+              >
+                <Globe size={14} />
+                {lang === 'en' ? 'हिंदी' : 'English'}
+              </button>
+            </div>
+
+            <button 
+              className="btn-secondary" 
+              style={{ width: '100%', marginTop: '10px', color: 'var(--status-red)', justifyContent: 'center', fontSize: '0.82rem', padding: '9px' }}
+              onClick={handleLogout}
+            >
+              <LogOut size={15} /> {t.logout}
+            </button>
+          </div>
+        )}
       </nav>
 
       {/* Main Viewport */}

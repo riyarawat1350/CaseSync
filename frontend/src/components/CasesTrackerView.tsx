@@ -359,9 +359,9 @@ export const CasesTrackerView: React.FC<CasesTrackerViewProps> = ({
 
       {/* Advanced Filter & Search Bar (Feature 3) */}
       <div className="surface-card" style={{ marginBottom: '16px', padding: '16px' }}>
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '12px', alignItems: 'center' }}>
+        <div className="filter-grid-container">
           {/* Main Search Input */}
-          <div style={{ position: 'relative', gridColumn: 'span 2' }}>
+          <div className="filter-search-col">
             <Search size={16} style={{ position: 'absolute', left: '12px', top: '12px', color: 'var(--text-muted)' }} />
             <input 
               type="text" 
@@ -695,7 +695,7 @@ export const CasesTrackerView: React.FC<CasesTrackerViewProps> = ({
 
             <div className="modal-body" style={{ maxHeight: '72vh', overflowY: 'auto' }}>
               {/* Mandatory 10 Case Fields Matrix (Feature 2) */}
-              <div style={{ 
+              <div className="drawer-fields-grid" style={{ 
                 display: 'grid', 
                 gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', 
                 gap: '10px', 

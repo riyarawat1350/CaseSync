@@ -87,17 +87,17 @@ export const LoginView: React.FC<LoginViewProps> = ({ onLoginSuccess, lang: _lan
       display: 'flex', 
       alignItems: 'center', 
       justifyContent: 'center',
-      padding: '20px'
+      padding: '16px'
     }}>
       <div style={{ 
         maxWidth: '920px', 
         width: '100%', 
         display: 'grid', 
-        gridTemplateColumns: 'repeat(auto-fit, minmax(360px, 1fr))', 
-        gap: '24px' 
+        gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', 
+        gap: '20px' 
       }}>
         {/* Left: Login Form Card */}
-        <div className="surface-card" style={{ padding: '32px', boxShadow: 'var(--shadow-xl)' }}>
+        <div className="surface-card" style={{ padding: '24px', boxShadow: 'var(--shadow-xl)' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '20px' }}>
             <div className="brand-emblem" style={{ width: '42px', height: '42px' }}>
               <Shield size={24} />

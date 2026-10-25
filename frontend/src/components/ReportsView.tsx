@@ -203,7 +203,7 @@ export const ReportsView: React.FC<ReportsViewProps> = ({ lang }) => {
       </div>
 
       {/* 7 Report Selector Tabs (Feature 6) */}
-      <div style={{ 
+      <div className="reports-tabs-bar" style={{ 
         display: 'flex', 
         gap: '6px', 
         marginBottom: '20px', 
