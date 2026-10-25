@@ -1,0 +1,419 @@
+
+AICTE CaseSync: Integrated Institution Complaint Monitoring & Coordination Dashboard
+Smart India Hackathon 2026 | Problem Statement ID: 26264 | Organization: AICTE | Department: Regulation Bureau | Theme: Smart Automation | Category: Software
+1. Executive Summary
+AICTE receives complaints about technical institutions through several channels, and different Bureaus/Cells (Regulation Bureau, PGRC, regional offices and others) process them separately. Nobody has one real-time view of "which Bureau is doing what about Institution X". The result is duplicate effort, parallel or conflicting actions, delays and weak accountability.
+CaseSync is a single-window web platform that (1) builds one master profile per institution, (2) pulls every complaint/case from every Bureau/Cell into one tracker, (3) automatically detects when different Bureaus are handling the same institution, even when complaint text and case numbers differ, (4) shows a live dashboard with SLA alerts, and (5) produces region-, bureau-, institution- and status-wise reports.
+The key innovation is a hybrid Overlap Detection Engine: entity resolution (to identify the same institution) + rule logic (same category, open status, time window) + multilingual semantic similarity (to detect same-issue complaints). It raises the alert "Potential Overlapping Cases – Coordination Required" and opens a coordination thread between the officers concerned.
+2. Problem Analysis
+2.1 What the problem statement really says
+Stated need
+Underlying problem
+What we must build
+View all cases in one place
+Data is siloed in Bureau-wise registers, portals, emails
+Central case repository + ingestion connectors
+Identify which Bureau is handling a case
+No ownership visibility
+Ownership/assignment tracking with transfer history
+Track movement of a case
+Movement not logged uniformly
+Immutable action-history timeline
+Detect RB and PGRC overlap
+Same institution appears under different names/IDs/complaint wording
+Entity resolution + similarity engine
+Avoid duplication, ensure coordination
+No communication channel between Bureaus
+Coordination thread, linking, "lead Bureau" designation
+Monitor pending, disposed, transferred, escalated
+No consolidated status taxonomy
+Standard status model + live KPIs
+Reports
+Manual compilation
+Report engine with scheduled and on-demand exports
+Alerts for timelines
+Delays discovered late
+SLA engine + notifications
+2.2 Root causes
+No master institution identity. The same college may be recorded as "ABC Institute of Technology", "A.B.C. Inst. of Tech." or by an old/new Permanent ID.
+Heterogeneous intake. Complaints arrive via PGRC portal, CPGRAMS-type grievance channels, email, letters, regional offices.
+No common case taxonomy. Categories and statuses differ between Bureaus.
+No cross-Bureau visibility, so overlap is discovered only by chance.
+2.3 Constraints and assumptions
+Users are government officials, so the UI must be simple, bilingual (English/Hindi) and role-restricted.
+Source systems may not have clean APIs, so we need multiple ingestion modes (API, database sync, CSV/Excel upload, manual entry form).
+Complaint data is sensitive (complainant identity, allegations), so strong security and privacy controls are needed.
+The real dataset is not provided, so the prototype uses synthetic data with deliberately injected duplicates and name variations.
+3. Target Users and Roles
+Role
+Access
+Main use
+Competent Authority / Senior Management
+All data, read plus approve escalations
+Executive dashboard, performance reports
+Regulation Bureau (RB) officer
+RB cases, read-only visibility of other Bureaus' summary for same institution
+Take action, respond to overlap alerts
+PGRC officer
+PGRC cases, same visibility rules
+Grievance handling
+Other Bureau/Cell officers
+Own cases plus overlap summary
+Coordination
+Regional Office/Centre
+Cases of their region
+Field verification, region reports
+System Admin
+Configuration, users, masters
+Maintenance (no access to case content unless granted)
+Visibility principle: a Bureau sees full details of its own cases and a summary (status, Bureau, officer, category) of other Bureaus' cases for the same institution. Full details can be requested via the coordination thread. This balances transparency with need-to-know.
+4. Proposed Solution: CaseSync
+4.1 High-level architecture
+The system has six layers:
+Data Ingestion Layer. Connectors for the PGRC portal, RB case system, email/letter entry and Excel/CSV bulk upload. A scheduler runs near-real-time syncs (for example every 5 minutes) and API webhooks push instant updates.
+Data Quality and Master Data Layer. Cleans and standardizes text, resolves institution identity against the AICTE Institution Master, and assigns every case a Unified Case ID.
+Intelligence Layer. Overlap Detection Engine, category classifier, priority scorer and SLA engine.
+Core Services Layer. Case service, workflow service, notification service, report service, search service, audit service.
+Presentation Layer. Role-based web dashboard (responsive, bilingual) plus optional mobile view.
+Security and Infrastructure Layer. Authentication (SSO/OTP), RBAC, encryption, audit logs, backups, deployment on MeitY-empanelled cloud or NIC.
+4.2 Recommended technology stack
+Component
+Choice
+Reason
+Frontend
+React with TypeScript, Tailwind CSS, Recharts/ECharts
+Fast, component based, strong charting
+Backend
+Python FastAPI (or Node.js NestJS)
+FastAPI keeps the AI/ML pipeline in the same language
+Primary database
+PostgreSQL
+Relational integrity, JSONB, full-text search, pg_trgm for fuzzy match
+Search
+PostgreSQL full-text (prototype), OpenSearch/Elasticsearch (scale)
+Fast filtered search
+Vector search
+pgvector
+Semantic similarity without a separate system
+Cache and queue
+Redis plus Celery
+Background jobs, alerts, scheduled SLA checks
+NLP/AI
+RapidFuzz, scikit-learn, multilingual sentence embeddings (e.g., multilingual-e5, MuRIL/IndicBERT for Hindi and regional text)
+Handles Hindi/English mixed complaints
+Document storage
+S3-compatible object storage (MinIO for prototype)
+Supporting documents
+Notifications
+Email (SMTP), SMS gateway, in-app, optional WhatsApp
+Alerts
+Auth
+JWT plus OTP/SSO integration, 2FA for senior roles
+Government-grade security
+Deployment
+Docker, Docker Compose (prototype), Kubernetes (production)
+Portable and scalable
+5. Module-wise Design (mapped to the 8 expected features)
+5.1 Centralized Institution Profile (Feature 1)
+Institution Master with AICTE Permanent ID, name, aliases, address, district, state, region, institution type, approval status, contact details and head of institution.
+Alias table stores earlier names, spelling variants and abbreviations to improve matching.
+Consolidated history: timeline of all complaints and regulatory actions linked to the institution, with a risk indicator (for example number of open cases, repeated complaints, cases beyond SLA).
+Institution 360 view: one page showing profile, open cases per Bureau, overlap alerts and past actions.
+5.2 Complaint/Case Tracking (Feature 2)
+Each case carries:
+Unified Case ID (for example CS-2026-RB-000123) plus the source reference number from the originating system
+Date of receipt, source channel, complainant type (student/faculty/other/anonymous)
+Category and sub-category, short summary, full description, attachments
+Current status, presently assigned Bureau/Cell and officer
+Last action taken, next action required, date of last action, expected disposal date
+Priority, SLA due date, link to related cases
+Standard status model: Received → Under Scrutiny → Under Process → Action Initiated → Pending (Awaiting Input) → Transferred → Escalated → Disposed (with outcome code). Every Bureau's native status is mapped to this standard set so that reports are comparable.
+5.3 Cross-Bureau/Cell Overlap Detection (Feature 3, the core innovation)
+See Section 6 for the full design. Outputs: overlap alert, similarity explanation ("why flagged"), linking/mapping, lead-Bureau designation.
+5.4 Real-Time Dashboard (Feature 4)
+KPI cards: total received, pending, under process, disposed, transferred, escalated, beyond-timeline.
+Charts: status distribution, Bureau-wise workload (stacked bars), region-wise heat map of India, monthly received vs. disposed trend, ageing buckets (0-7, 8-15, 16-30, 31-60, 60+ days).
+Widgets: top institutions by open cases, overlap alerts needing coordination, SLA breaches today.
+Drill-down: clicking any chart segment opens the filtered case list.
+Live refresh via WebSocket or short-interval polling.
+5.5 Workflow and Action History (Feature 5)
+Append-only case timeline: every action stores who, which Bureau, timestamp, action type, remarks and attachments.
+Transfer/escalation records capture from-Bureau, to-Bureau, reason, and acceptance by the receiving officer. Escalation follows a configurable hierarchy (Officer → Section head → Director/Advisor → Competent Authority).
+Records are tamper-evident: updates create new entries, never overwrite old ones. A hash chain on audit entries can be added for integrity proof.
+5.6 Search and Filters (Feature 6)
+Search by Institution name (fuzzy and alias aware, so "ABC inst tech" still finds the college), AICTE Permanent ID, Case ID, Bureau/Cell, Region, category, status and date range. Filters can be combined and saved as named views. Results export to Excel/PDF.
+5.7 Alerts and Notifications (Feature 7)
+Alert type
+Trigger
+Recipient
+Overlap alert
+Engine finds a potential overlap
+Officers of all Bureaus involved plus section heads
+Pending reminder
+No action for N days (configurable)
+Assigned officer
+SLA warning
+75% and 90% of timeline elapsed
+Officer, then supervisor
+SLA breach
+Timeline crossed
+Officer, supervisor, Director
+Escalation alert
+Case escalated or auto-escalated
+Next-level authority
+Transfer alert
+Case transferred to a Bureau
+Receiving Bureau
+Channels: in-app bell, email, SMS; optional daily digest. Rules are configurable by the admin without code changes.
+5.8 Reports and Analytics (Feature 8)
+Bureau-wise, Region-wise, Institution-wise complaint history, pending ageing, disposal rate, overlapping/duplicate cases, and monthly/quarterly performance reports. Formats: on-screen, PDF, Excel, CSV. Scheduled reports can be emailed to senior management automatically.
+6. Overlap Detection Engine (Innovation Detail)
+The goal is to flag cases that concern the same institution (and possibly the same issue) across different Bureaus, even when IDs, names and text differ.
+6.1 Step 1: Institution Entity Resolution
+Matching is done in tiers, from most to least certain:
+Exact match on AICTE Permanent ID (confidence 1.0).
+Deterministic secondary keys: registered email domain, phone number, AISHE code, approval-file number.
+Fuzzy name match on normalized names. Normalization lowercases text, removes punctuation, expands abbreviations (Inst. → Institute, Engg → Engineering, Tech → Technology) and removes stop words. Scored with Jaro-Winkler, token-set ratio and trigram similarity.
+Address support: district, pincode and state agreement boost the score.
+Human-in-the-loop: matches in the uncertain band (for example 0.70 to 0.90) go to a data steward for confirmation, and each confirmation is stored as a new alias so the system learns.
+Indicative score: Institution_Match = 0.5·NameSim + 0.2·AddressSim + 0.2·IDOrContactMatch + 0.1·DistrictPinMatch
+6.2 Step 2: Case Relationship Scoring
+Once two cases are linked to the same institution, compute how related they are.
+Signal
+Weight (indicative)
+Notes
+Same institution (resolved)
+Gate: required
+Without it, no overlap
+Different Bureaus/Cells
+Gate: required
+The focus is cross-Bureau overlap
+Both cases open (not disposed)
+Gate
+Closed cases are shown as "history" instead
+Same or related category
+25%
+Category taxonomy with a related-category map
+Semantic similarity of descriptions
+35%
+Multilingual embeddings with cosine similarity
+Time proximity
+15%
+Received within a configurable window (e.g., 90 days)
+Same complainant or same allegation keywords
+15%
+Names, dates, specific facility/course mentions
+Same regulatory action type
+10%
+e.g., both involve approval withdrawal or inspection
+Output levels:
+High overlap (≥ 0.75): "Potential Overlapping Cases – Coordination Required" with a red badge and immediate notification.
+Medium (0.50 to 0.75): "Related Cases – Review" with an amber badge.
+Institution-level notice: even when issues differ, the dashboard shows "Multiple Bureaus active on this institution" so no one acts blind.
+6.3 Step 3: Explainability
+Every alert shows why it fired: matched institution (with confidence), matched category, similar phrases highlighted, dates, and the Bureaus involved. This is important for official trust and for audit.
+6.4 Step 4: Coordination Workflow
+Alert appears for both Bureaus' officers.
+Officer chooses: Link as related, Mark as duplicate (merge), Not an overlap (this feedback improves the model), or Request coordination.
+A coordination thread opens with comments and attachments; either Bureau can propose a Lead Bureau.
+The decision (for example, "RB will lead; PGRC to close with reference to RB action") is recorded with timestamp and approver.
+Linked cases show a banner on each other so both sides stay aligned until disposal.
+6.5 Worked example (from the problem statement)
+Case P-101: Institution A, received by PGRC, "Under Process", category: faculty salary non-payment.
+Case R-455: Institution A (spelled "A.B.C Inst of Engg & Tech" in RB records), received by RB, "Action Initiated", category: compliance deficiency, with salary-related remarks.
+Engine resolves both to the same Permanent ID, finds different Bureaus, both open, related categories and high semantic similarity, giving a score of about 0.82.
+Result: "Potential Overlapping Cases – Coordination Required" is shown to both officers and their supervisors.
+6.6 Model approach and phasing
+Phase 1 (prototype): rule-based plus fuzzy matching plus TF-IDF similarity. This is fully explainable and needs no heavy training.
+Phase 2: multilingual embeddings with pgvector for semantic similarity, and a lightweight classifier (logistic regression or gradient boosting) trained on officer feedback to tune weights.
+Phase 3: optional LLM-assisted summarization of related cases and suggested coordination notes, with human approval always required (the AI never takes decisions).
+7. Data Model (Core Entities)
+Table
+Key fields
+institution
+institution_id, aicte_permanent_id, name, address, district, state, region, type, status
+institution_alias
+alias_id, institution_id, alias_name, source, verified_by
+bureau_cell
+bureau_id, name, type (RB/PGRC/Other/Regional), parent_id
+user
+user_id, name, designation, bureau_id, role, region, contact, status
+case
+case_id, source_ref_no, institution_id, category_id, summary, description, received_date, source_channel, priority, current_status, current_bureau_id, current_officer_id, last_action, next_action, last_action_date, due_date
+case_action
+action_id, case_id, action_type, by_user_id, by_bureau_id, timestamp, remarks, attachment_ids
+case_transfer
+transfer_id, case_id, from_bureau, to_bureau, reason, transferred_at, accepted_at, is_escalation
+case_link
+link_id, case_a, case_b, link_type (duplicate/related/overlap), score, status, decided_by, decided_at
+overlap_alert
+alert_id, institution_id, case_ids, score, reasons (JSON), state (new/acknowledged/resolved), lead_bureau
+coordination_thread
+thread_id, alert_id, messages, decision, decided_by
+sla_rule
+rule_id, category, priority, days_allowed, warning_thresholds
+notification
+notification_id, user_id, type, payload, channel, sent_at, read_at
+audit_log
+log_id, user_id, event, entity, before/after, ip, timestamp, hash
+document
+doc_id, case_id, file_name, storage_key, checksum, uploaded_by
+8. Security, Privacy and Compliance
+Authentication: SSO with OTP/2FA; session timeout; device and IP logging.
+Authorization: role-based plus Bureau-scoped and region-scoped access control. Sensitive fields (complainant identity, whistleblower complaints) masked by default.
+Data protection: TLS in transit, AES-256 at rest, field-level encryption for personal data, regular encrypted backups.
+Audit: every view, edit, export and login is logged. Audit logs are immutable.
+Regulatory alignment: Digital Personal Data Protection Act 2023 principles (purpose limitation, minimal data, retention rules), GIGW guidelines for accessibility and government web standards, CERT-In security guidelines, and hosting on MeitY-empanelled cloud/NIC.
+Safety: input validation, protection against OWASP Top 10 issues, file scanning for uploads, rate limiting.
+Human accountability: AI only suggests; all decisions on linking, merging and disposal are taken by authorized officials.
+9. Integration Strategy
+Source
+Method
+Fallback
+PGRC grievance portal
+REST API / database view
+Scheduled CSV import
+RB approval/regulation system
+REST API / DB replication
+Excel upload
+AICTE Institution Master / approval portal
+API sync (daily plus on change)
+Master data import
+Email and letters
+Manual entry form with OCR assist for scanned letters
+Data-entry operator
+Regional offices
+Direct login to CaseSync
+Bulk upload
+A canonical case schema and a mapping layer convert each source's fields and statuses into the unified model, so a new Bureau can be added by configuring a mapping instead of writing new code.
+Legacy data migration: import historical cases, run a one-time entity resolution pass, and send uncertain matches to the data steward queue.
+10. User Experience Design
+Home dashboard for each role (executive view vs. officer worklist).
+Overlap Center: a dedicated screen listing all active overlap alerts with filters by region and Bureau.
+Institution 360 page and Case detail page (timeline on the left, linked cases and documents on the right).
+Bilingual UI (English/Hindi), keyboard friendly, accessible (WCAG/GIGW), light and dark themes, mobile responsive.
+My Worklist with due-today and overdue items first, so officers see what needs action.
+11. Implementation Plan
+11.1 Hackathon prototype scope (what to build and demo)
+Synthetic dataset: about 50 institutions with name variants, about 500 to 1000 cases across RB, PGRC and 2 other Bureaus, with injected overlaps and SLA breaches.
+Institution master and entity resolution with fuzzy matching.
+Case tracker with timeline, transfer and escalation.
+Overlap detection with explainable score and coordination thread.
+Live dashboard with KPIs, charts, ageing, Bureau workload.
+Search and filters.
+SLA and overlap alerts (in-app plus email).
+At least three downloadable reports (Bureau-wise, Region-wise, Overlap report).
+Role-based login with 3 demo roles (RB, PGRC, Senior Management).
+11.2 Suggested team split (6 members)
+Member
+Responsibility
+1
+Frontend: dashboard, charts, case and institution pages
+2
+Frontend: search, filters, workflow UI, reports UI
+3
+Backend: APIs, auth/RBAC, case workflow, audit
+4
+AI/Data: entity resolution, overlap engine, synthetic data
+5
+Alerts/SLA engine, notifications, report generation, integrations
+6
+Documentation, PPT, demo video, testing, deployment
+11.3 Production roadmap
+Phase
+Duration
+Deliverable
+1. Discovery
+3 to 4 weeks
+Requirements, status and category taxonomy, source system study
+2. Core build
+8 to 10 weeks
+Master, case tracking, workflow, dashboard, RBAC
+3. Integration and migration
+4 to 6 weeks
+Connectors, legacy import, steward queue
+4. Intelligence
+4 weeks
+Overlap engine tuning, semantic search, feedback loop
+5. Pilot
+4 weeks
+RB plus PGRC pilot, training, feedback
+6. Rollout
+4 weeks
+All Bureaus and regional offices, support setup
+12. Risks and Mitigation
+Risk
+Impact
+Mitigation
+Poor or inconsistent source data
+Wrong matches
+Data cleaning, alias learning, steward review queue
+False-positive overlap alerts
+Alert fatigue
+Tunable thresholds, "Not an overlap" feedback, severity levels
+Missed overlaps
+Duplicate action continues
+Institution-level notice as a safety net, periodic batch re-scan
+Bureau resistance to sharing data
+Low adoption
+Summary-level sharing by default, clear visibility rules, training, mandate from Competent Authority
+Integration limits of old systems
+Delays
+Multiple ingestion modes including file upload
+Privacy/security breach
+Reputational and legal
+RBAC, encryption, masking, audit, security testing
+Hindi/regional-language complaints
+Weak NLP
+Multilingual embeddings, translation fallback
+13. Expected Impact and KPIs
+Expected outcome (from problem statement)
+How CaseSync delivers
+KPI
+Reduce duplication
+Overlap alerts and linking
+% of cases flagged and merged; duplicate actions avoided
+Prevent conflicting actions
+Coordination thread and lead Bureau
+Number of conflicts resolved before action
+Better coordination
+Shared institution view
+Average time to coordinate after alert
+Timely disposal
+SLA engine and reminders
+% disposed within SLA; average disposal time
+Accountability and transparency
+Immutable action history
+Cases with complete audit trail (target 100%)
+Real-time monitoring
+Live dashboard
+Report generation time (days to seconds)
+Data-driven decisions
+Analytics and trend reports
+Use of reports in review meetings
+14. Why This Solution Stands Out (USPs for judges)
+Explainable hybrid AI, not a black box: every overlap alert shows reasons and a confidence score.
+Handles real-world messiness: name variants, abbreviations, Hindi/English text, different case numbers.
+Closes the loop: it does not stop at detection; it provides linking, coordination threads, lead-Bureau decisions and tracking until disposal.
+Configurable, not hard-coded: SLA rules, statuses, categories, thresholds and Bureau mappings are admin-controlled.
+Privacy-aware design: summary-level cross-Bureau visibility, masking, audit and DPDP alignment.
+Scalable and extensible: adding a new Bureau or data source needs configuration, not redevelopment.
+Human in control: AI suggests, officials decide.
+15. Future Scope
+Predictive analytics: forecast which institutions are likely to receive repeated complaints, and expected disposal delays.
+Auto-suggested action based on similar past cases and outcomes.
+Public-facing status tracker for complainants (with privacy controls).
+Integration with the approval process, APAAR-based student verification and compliance monitoring systems from the other AICTE problem statements (SIH26262, SIH26263, SIH26261) to form a unified AICTE data ecosystem.
+Voice and OCR-based intake for physical letters and regional languages.
+Mobile app for field inspectors at regional offices.
+16. Suggested Demo Script (5 minutes)
+Login as Senior Management and show the live dashboard (KPIs, region heat map, Bureau workload, ageing).
+Open an Institution 360 page, showing the consolidated history across RB and PGRC.
+Show an Overlap Alert ("Potential Overlapping Cases – Coordination Required") and the explanation of why it was flagged despite different names and case numbers.
+Login as RB officer, open the coordination thread, propose RB as the lead Bureau, and link the cases.
+Login as PGRC officer, see the linked banner, and accept the decision.
+Show an SLA warning and an auto-escalation.
+Search an institution using a misspelled name, and generate the Bureau-wise and Overlap reports.
+Close with impact numbers from the synthetic data (for example duplicates detected, average coordination time).
+17. Conclusion
+CaseSync gives AICTE one source of truth for institution-related complaints. By combining a master institution identity, unified case tracking, explainable overlap detection, SLA-driven alerts and rich analytics, it removes duplicated effort, prevents conflicting parallel actions, and gives management real-time visibility. The design is practical for a hackathon prototype and scalable into a production-grade AICTE platform.
