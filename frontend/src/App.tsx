@@ -2,13 +2,15 @@ import { useState, useEffect } from 'react';
 import { 
   LayoutDashboard, GitMerge, FileText, 
   Building2, BarChart3, Bell, Moon, Sun, 
-  Globe, Shield
+  Globe, Shield, LogOut
 } from 'lucide-react';
 import { DashboardView } from './components/DashboardView';
 import { OverlapCenterView } from './components/OverlapCenterView';
 import { CasesTrackerView } from './components/CasesTrackerView';
 import { Institution360View } from './components/Institution360View';
 import { ReportsView } from './components/ReportsView';
+import { AlertsCenterModal } from './components/AlertsCenterModal';
+import { LoginView } from './components/LoginView';
 import { api } from './api';
 import type { 
   DashboardAnalytics, CaseItem, InstitutionItem, 
@@ -20,15 +22,24 @@ export function App() {
   const [theme, setTheme] = useState<'light' | 'dark'>('light');
   const [lang, setLang] = useState<'en' | 'hi'>('en');
 
+  // Authentication & Session (Feature 7)
+  const [isAuthenticated, setIsAuthenticated] = useState<boolean>(() => {
+    return Boolean(api.getStoredToken());
+  });
+
   // Personas & Active User
   const [personas, setPersonas] = useState<Persona[]>([]);
-  const [currentPersona, setCurrentPersona] = useState<Persona>({
-    id: 'senior_mgmt',
-    name: 'Prof. T. G. Sitharam',
-    role: 'Chairman / Competent Authority',
-    bureau: 'MGMT',
-    bureau_name: 'Executive Management',
-    permissions: ['ALL_DATA_READ', 'APPROVE_ESCALATIONS', 'EXECUTIVE_REPORTS']
+  const [currentPersona, setCurrentPersona] = useState<Persona>(() => {
+    const saved = api.getStoredUser();
+    return saved || {
+      id: 'senior_mgmt',
+      username: 'chairman',
+      name: 'Prof. T. G. Sitharam',
+      role: 'Chairman / Competent Authority',
+      bureau: 'MGMT',
+      bureau_name: 'Executive Management',
+      permissions: ['ALL_DATA_READ', 'APPROVE_ESCALATIONS', 'EXECUTIVE_REPORTS', 'FULL_ADMIN']
+    };
   });
 
   // Data Stores
@@ -38,8 +49,9 @@ export function App() {
   const [overlaps, setOverlaps] = useState<OverlapAlert[]>([]);
   const [selectedOverlap, setSelectedOverlap] = useState<OverlapAlert | null>(null);
 
-  // Notifications Popover
-  const [showNotifications, setShowNotifications] = useState(false);
+  // Alerts Center Modal (Feature 5)
+  const [showAlertsModal, setShowAlertsModal] = useState(false);
+  const [unreadAlertsCount, setUnreadAlertsCount] = useState(0);
 
   useEffect(() => {
     document.documentElement.setAttribute('data-theme', theme);
@@ -47,28 +59,32 @@ export function App() {
 
   const loadAllData = async () => {
     try {
-      const [p, an, c, inst, ovr] = await Promise.all([
+      const [p, an, c, inst, ovr, altData] = await Promise.all([
         api.getPersonas(),
         api.getDashboardAnalytics(),
         api.getCases(),
         api.getInstitutions(),
-        api.getOverlaps()
+        api.getOverlaps(),
+        api.getAlerts()
       ]);
       setPersonas(p || []);
       setAnalytics(an);
       setCases(c || []);
       setInstitutions(inst || []);
       setOverlaps(ovr || []);
+      setUnreadAlertsCount(altData?.unread_total || 0);
     } catch (err) {
       console.error("Failed to load CaseSync data:", err);
     }
   };
 
   useEffect(() => {
-    loadAllData();
-    const interval = setInterval(loadAllData, 20000);
-    return () => clearInterval(interval);
-  }, []);
+    if (isAuthenticated) {
+      loadAllData();
+      const interval = setInterval(loadAllData, 20000);
+      return () => clearInterval(interval);
+    }
+  }, [isAuthenticated, currentPersona.id]);
 
   const toggleTheme = () => {
     setTheme(prev => prev === 'light' ? 'dark' : 'light');
@@ -80,37 +96,73 @@ export function App() {
 
   const handlePersonaChange = (personaId: string) => {
     const match = personas.find(p => p.id === personaId);
-    if (match) setCurrentPersona(match);
+    if (match) {
+      setCurrentPersona(match);
+      localStorage.setItem('casesync_user', JSON.stringify(match));
+    }
+  };
+
+  const handleLoginSuccess = (user: any) => {
+    setCurrentPersona(user);
+    setIsAuthenticated(true);
+    loadAllData();
+  };
+
+  const handleLogout = () => {
+    api.logout();
+    setIsAuthenticated(false);
   };
 
   const t = {
     govIndia: lang === 'hi' ? 'भारत सरकार | Government of India' : 'Government of India | भारत सरकार',
     aicteDept: lang === 'hi' ? 'अखिल भारतीय तकनीकी शिक्षा परिषद (विनियमन ब्यूरो)' : 'All India Council for Technical Education (Regulation Bureau)',
     sihCode: 'SIH 2026 | Problem ID: 26264',
+    gigwDesign: 'GIGW-aligned design',
     dashboard: lang === 'hi' ? 'डैशबोर्ड' : 'Dashboard',
     overlapCenter: lang === 'hi' ? 'ओवरलैप केंद्र' : 'Overlap Center',
     casesTracker: lang === 'hi' ? 'केस ट्रैकर' : 'Cases Tracker',
     institution360: lang === 'hi' ? 'संस्थान 360' : 'Institution 360',
     reports: lang === 'hi' ? 'रिपोर्ट्स' : 'Reports',
-    roleLabel: lang === 'hi' ? 'सक्रिय पद:' : 'Role View:',
+    roleLabel: lang === 'hi' ? 'सक्रिय पद (Demo):' : 'Active Role (Demo):',
+    logout: lang === 'hi' ? 'लॉग आउट' : 'Sign Out'
   };
 
-  const notificationItems = [
-    ...(overlaps.filter(o => o.level === 'HIGH').map(o => ({
-      id: o.alert_id,
-      title: `Potential Overlap: ${o.institution_name}`,
-      desc: `High overlap (${Math.round(o.score * 100)}%) between ${o.case_a.bureau_name} and ${o.case_b.bureau_name}`,
-      time: 'Urgent Action Required',
-      type: 'overlap'
-    }))),
-    ...(cases.filter(c => c.sla_severity === 'red').map(c => ({
-      id: c.id,
-      title: `SLA Breached: Case ${c.id}`,
-      desc: `${c.institution_name} - ${c.category_name} (${c.sla_label})`,
-      time: `${c.days_elapsed} days elapsed`,
-      type: 'sla'
-    })))
-  ];
+  const activeOverlapsTotal = overlaps.filter(o => o.coordination_status !== 'RESOLVED' && o.level === 'HIGH').length;
+
+  // Render Login View if not authenticated
+  if (!isAuthenticated) {
+    return (
+      <div className="app-layout">
+        <header className="gov-topbar">
+          <div>
+            <span>{t.govIndia}</span> &bull; <strong>{t.aicteDept}</strong>
+          </div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
+            <span style={{ opacity: 0.9 }}>{t.sihCode} &bull; {t.gigwDesign}</span>
+            <button 
+              onClick={toggleLang}
+              style={{ 
+                background: 'rgba(255,255,255,0.15)', 
+                border: 'none', 
+                color: '#ffffff', 
+                padding: '2px 8px', 
+                borderRadius: '4px',
+                fontSize: '0.74rem',
+                cursor: 'pointer',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '4px'
+              }}
+            >
+              <Globe size={12} /> {lang === 'en' ? 'हिंदी' : 'English'}
+            </button>
+          </div>
+        </header>
+
+        <LoginView onLoginSuccess={handleLoginSuccess} lang={lang} />
+      </div>
+    );
+  }
 
   return (
     <div className="app-layout">
@@ -120,7 +172,7 @@ export function App() {
           <span>{t.govIndia}</span> &bull; <strong>{t.aicteDept}</strong>
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
-          <span style={{ opacity: 0.9 }}>{t.sihCode}</span>
+          <span style={{ opacity: 0.9 }}>{t.sihCode} &bull; {t.gigwDesign}</span>
           <button 
             onClick={toggleLang}
             style={{ 
@@ -176,9 +228,9 @@ export function App() {
             >
               <GitMerge size={16} />
               {t.overlapCenter}
-              {overlaps.filter(o => o.level === 'HIGH').length > 0 && (
-                <span className="nav-badge-pill">
-                  {overlaps.filter(o => o.level === 'HIGH').length}
+              {activeOverlapsTotal > 0 && (
+                <span className="nav-badge-pill" style={{ background: 'var(--status-red)' }}>
+                  {activeOverlapsTotal}
                 </span>
               )}
             </button>
@@ -208,9 +260,9 @@ export function App() {
             </button>
           </div>
 
-          {/* Persona Switcher & Tooling */}
+          {/* Persona Switcher & Tooling (Feature 7 & 5) */}
           <div className="nav-actions">
-            {/* Persona Dropdown */}
+            {/* Persona Dropdown (Demo Shortcut) */}
             <div className="persona-selector">
               <span style={{ fontSize: '0.72rem', color: 'var(--text-muted)' }}>{t.roleLabel}</span>
               <select 
@@ -226,66 +278,38 @@ export function App() {
               </select>
             </div>
 
-            {/* Notification Bell */}
+            {/* Notification Bell Badge (Feature 5: Alerts Center) */}
             <div style={{ position: 'relative' }}>
               <button 
                 className="icon-btn" 
-                onClick={() => setShowNotifications(!showNotifications)}
-                title="Notifications & SLA Alerts"
+                onClick={() => setShowAlertsModal(true)}
+                title="Alerts Center (Duplicate Overlaps, SLA, Escalations, Reminders)"
+                style={{ position: 'relative' }}
               >
                 <Bell size={18} />
-                {notificationItems.length > 0 && <span className="indicator-dot" />}
+                {unreadAlertsCount > 0 && (
+                  <span 
+                    style={{ 
+                      position: 'absolute', 
+                      top: '-4px', 
+                      right: '-4px', 
+                      background: 'var(--status-red)', 
+                      color: '#ffffff', 
+                      borderRadius: '50%', 
+                      width: '18px', 
+                      height: '18px', 
+                      fontSize: '0.66rem', 
+                      fontWeight: 700, 
+                      display: 'flex', 
+                      alignItems: 'center', 
+                      justifyContent: 'center',
+                      boxShadow: '0 0 0 2px var(--bg-surface)'
+                    }}
+                  >
+                    {unreadAlertsCount > 99 ? '99+' : unreadAlertsCount}
+                  </span>
+                )}
               </button>
-
-              {/* Notification Popover */}
-              {showNotifications && (
-                <div style={{ 
-                  position: 'absolute', 
-                  right: 0, 
-                  top: '46px', 
-                  width: '340px', 
-                  background: 'var(--bg-surface)', 
-                  border: '1px solid var(--border-subtle)', 
-                  borderRadius: 'var(--radius-lg)', 
-                  boxShadow: 'var(--shadow-xl)', 
-                  zIndex: 200,
-                  padding: '16px'
-                }}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
-                    <strong style={{ fontSize: '0.9rem' }}>SLA Alerts & Overlaps</strong>
-                    <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>{notificationItems.length} active</span>
-                  </div>
-
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', maxHeight: '300px', overflowY: 'auto' }}>
-                    {notificationItems.length === 0 ? (
-                      <p style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>No pending alerts</p>
-                    ) : (
-                      notificationItems.map((n, i) => (
-                        <div 
-                          key={i} 
-                          style={{ 
-                            padding: '8px 10px', 
-                            borderRadius: 'var(--radius-sm)', 
-                            background: 'var(--bg-secondary)',
-                            borderLeft: `3px solid ${n.type === 'overlap' ? 'var(--status-red)' : 'var(--status-amber)'}`,
-                            fontSize: '0.8rem',
-                            cursor: 'pointer'
-                          }}
-                          onClick={() => {
-                            setShowNotifications(false);
-                            if (n.type === 'overlap') setActiveTab('overlaps');
-                            else setActiveTab('cases');
-                          }}
-                        >
-                          <strong style={{ display: 'block', color: 'var(--text-primary)' }}>{n.title}</strong>
-                          <div style={{ color: 'var(--text-secondary)', fontSize: '0.74rem' }}>{n.desc}</div>
-                          <span style={{ fontSize: '0.68rem', color: 'var(--text-muted)' }}>{n.time}</span>
-                        </div>
-                      ))
-                    )}
-                  </div>
-                </div>
-              )}
             </div>
 
             {/* Dark / Light Mode */}
@@ -295,6 +319,16 @@ export function App() {
               title="Toggle Theme"
             >
               {theme === 'light' ? <Moon size={18} /> : <Sun size={18} />}
+            </button>
+
+            {/* Logout Button */}
+            <button 
+              className="icon-btn" 
+              onClick={handleLogout}
+              title={t.logout}
+              style={{ color: 'var(--text-muted)' }}
+            >
+              <LogOut size={18} />
             </button>
           </div>
         </div>
@@ -347,6 +381,24 @@ export function App() {
           />
         )}
       </main>
+
+      {/* Dedicated Alerts Center Modal (Feature 5) */}
+      <AlertsCenterModal 
+        isOpen={showAlertsModal}
+        onClose={() => setShowAlertsModal(false)}
+        onNavigateToCase={(_caseId) => {
+          setShowAlertsModal(false);
+          setActiveTab('cases');
+        }}
+        onNavigateToOverlap={(alertId) => {
+          setShowAlertsModal(false);
+          const match = overlaps.find(o => o.alert_id === alertId);
+          if (match) setSelectedOverlap(match);
+          setActiveTab('overlaps');
+        }}
+        onAlertsUpdated={loadAllData}
+        lang={lang}
+      />
     </div>
   );
 }

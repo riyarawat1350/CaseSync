@@ -52,3 +52,9 @@ yarn-error.log*
 *.swo
 .DS_Store
 Thumbs.db
+
+# Databases
+*.db
+*.sqlite
+*.sqlite3
+backend/casesync.db

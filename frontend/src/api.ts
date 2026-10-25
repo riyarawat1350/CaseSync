@@ -2,6 +2,11 @@ import type { CaseItem, InstitutionItem, OverlapAlert, DashboardAnalytics, Perso
 
 const API_BASE = (import.meta.env.VITE_API_BASE_URL || '/api').replace(/\/$/, '');
 
+const getAuthHeaders = (): Record<string, string> => {
+  const token = localStorage.getItem('casesync_jwt_token');
+  return token ? { 'Authorization': `Bearer ${token}` } : {};
+};
+
 // Client-side fallback dataset in case backend is waking up or offline on static deployment
 const FALLBACK_PERSONAS: Persona[] = [
   {
@@ -515,7 +520,10 @@ export const api = {
     bureau?: string;
     status?: string;
     priority?: string;
+    category?: string;
     region?: string;
+    from_date?: string;
+    to_date?: string;
     search?: string;
   }): Promise<CaseItem[]> => {
     try {
@@ -523,10 +531,13 @@ export const api = {
       if (filters?.bureau && filters.bureau !== 'all') params.append('bureau', filters.bureau);
       if (filters?.status && filters.status !== 'all') params.append('status', filters.status);
       if (filters?.priority && filters.priority !== 'all') params.append('priority', filters.priority);
+      if (filters?.category && filters.category !== 'all') params.append('category', filters.category);
       if (filters?.region && filters.region !== 'all') params.append('region', filters.region);
+      if (filters?.from_date) params.append('from_date', filters.from_date);
+      if (filters?.to_date) params.append('to_date', filters.to_date);
       if (filters?.search) params.append('search', filters.search);
 
-      const res = await fetch(`${API_BASE}/cases?${params.toString()}`);
+      const res = await fetch(`${API_BASE}/cases?${params.toString()}`, { headers: getAuthHeaders() });
       if (!res.ok) throw new Error('API error');
       return await res.json();
     } catch {
@@ -617,11 +628,12 @@ export const api = {
     action?: string;
     lead_bureau?: string;
     decision_notes?: string;
+    target_status?: string;
   }): Promise<any> => {
     try {
       const res = await fetch(`${API_BASE}/overlaps/${alertId}/coordinate`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
         body: JSON.stringify(data)
       });
       if (!res.ok) throw new Error('API error');
@@ -647,7 +659,7 @@ export const api = {
 
   getReportsBureau: async (): Promise<any> => {
     try {
-      const res = await fetch(`${API_BASE}/reports/bureau`);
+      const res = await fetch(`${API_BASE}/reports/bureau`, { headers: getAuthHeaders() });
       if (!res.ok) throw new Error('API error');
       return await res.json();
     } catch {
@@ -657,7 +669,7 @@ export const api = {
 
   getReportsRegion: async (): Promise<any> => {
     try {
-      const res = await fetch(`${API_BASE}/reports/region`);
+      const res = await fetch(`${API_BASE}/reports/region`, { headers: getAuthHeaders() });
       if (!res.ok) throw new Error('API error');
       return await res.json();
     } catch {
@@ -667,7 +679,7 @@ export const api = {
 
   getReportsOverlaps: async (): Promise<any> => {
     try {
-      const res = await fetch(`${API_BASE}/reports/overlaps`);
+      const res = await fetch(`${API_BASE}/reports/overlaps`, { headers: getAuthHeaders() });
       if (!res.ok) throw new Error('API error');
       return await res.json();
     } catch {
@@ -685,6 +697,210 @@ export const api = {
         lead_bureau: o.lead_bureau || "Unassigned",
         decision: o.decision || "Awaiting Joint Review"
       }));
+    }
+  },
+
+  getReportsAgeing: async (): Promise<any> => {
+    try {
+      const res = await fetch(`${API_BASE}/reports/ageing`, { headers: getAuthHeaders() });
+      if (!res.ok) throw new Error('API error');
+      return await res.json();
+    } catch {
+      return FALLBACK_ANALYTICS.aging_buckets;
+    }
+  },
+
+  getReportsDisposalRate: async (): Promise<any> => {
+    try {
+      const res = await fetch(`${API_BASE}/reports/disposal-rate`, { headers: getAuthHeaders() });
+      if (!res.ok) throw new Error('API error');
+      return await res.json();
+    } catch {
+      return [
+        { month: "May 2026", received: 22, disposed: 19, disposal_rate: 86.4 },
+        { month: "Jun 2026", received: 34, disposed: 30, disposal_rate: 88.2 },
+        { month: "Jul 2026", received: 41, disposed: 38, disposal_rate: 92.7 },
+        { month: "Aug 2026", received: 48, disposed: 41, disposal_rate: 85.4 },
+        { month: "Sep 2026", received: 52, disposed: 44, disposal_rate: 84.6 },
+        { month: "Oct 2026", received: 45, disposed: 35, disposal_rate: 77.8 }
+      ];
+    }
+  },
+
+  getReportsPerformance: async (): Promise<any> => {
+    try {
+      const res = await fetch(`${API_BASE}/reports/performance`, { headers: getAuthHeaders() });
+      if (!res.ok) throw new Error('API error');
+      return await res.json();
+    } catch {
+      return [
+        { quarter: "Q1 2026 (Jan-Mar)", cases_handled: 124, disposed: 115, sla_compliance_rate: "92.7%", avg_resolution_days: 21.4 },
+        { quarter: "Q2 2026 (Apr-Jun)", cases_handled: 158, disposed: 142, sla_compliance_rate: "89.8%", avg_resolution_days: 23.1 },
+        { quarter: "Q3 2026 (Jul-Sep)", cases_handled: 182, disposed: 164, sla_compliance_rate: "90.1%", avg_resolution_days: 22.8 },
+        { quarter: "Q4 2026 (Oct-Dec Current)", cases_handled: 215, disposed: 92, sla_compliance_rate: "86.5%", avg_resolution_days: 24.2 }
+      ];
+    }
+  },
+
+  getReportInstitutionHistory: async (instId: string): Promise<any> => {
+    try {
+      const res = await fetch(`${API_BASE}/reports/institution/${instId}`, { headers: getAuthHeaders() });
+      if (!res.ok) throw new Error('API error');
+      return await res.json();
+    } catch {
+      return null;
+    }
+  },
+
+  // Document Upload & Supporting Documents
+  uploadDocument: async (caseId: string, data: {
+    name: string;
+    size: number;
+    uploader: string;
+    bureau: string;
+    file_type?: string;
+    data_base64?: string;
+  }): Promise<any> => {
+    try {
+      const res = await fetch(`${API_BASE}/cases/${caseId}/documents`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
+        body: JSON.stringify(data)
+      });
+      if (!res.ok) throw new Error('API error');
+      return await res.json();
+    } catch {
+      return { success: true };
+    }
+  },
+
+  // Link cases
+  linkCases: async (caseId: string, data: {
+    user_name: string;
+    bureau: string;
+    target_case_id: string;
+    reason?: string;
+  }): Promise<any> => {
+    try {
+      const res = await fetch(`${API_BASE}/cases/${caseId}/link`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
+        body: JSON.stringify(data)
+      });
+      if (!res.ok) throw new Error('API error');
+      return await res.json();
+    } catch {
+      return { success: true };
+    }
+  },
+
+  // Mark duplicate
+  markDuplicate: async (caseId: string, data: {
+    user_name: string;
+    bureau: string;
+    primary_case_id: string;
+    reason?: string;
+  }): Promise<any> => {
+    try {
+      const res = await fetch(`${API_BASE}/cases/${caseId}/duplicate`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
+        body: JSON.stringify(data)
+      });
+      if (!res.ok) throw new Error('API error');
+      return await res.json();
+    } catch {
+      return { success: true };
+    }
+  },
+
+  // Alerts API
+  getAlerts: async (category?: string): Promise<{ alerts: any[]; unread_total: number; category_counts: Record<string, number> }> => {
+    try {
+      const url = category && category !== 'ALL' ? `${API_BASE}/alerts?category=${category}` : `${API_BASE}/alerts`;
+      const res = await fetch(url, { headers: getAuthHeaders() });
+      if (!res.ok) throw new Error('API error');
+      return await res.json();
+    } catch {
+      return {
+        alerts: [],
+        unread_total: 0,
+        category_counts: { DUPLICATE_OVERLAP: 0, SLA_ALERT: 0, ESCALATION: 0, PENDING_REMINDER: 0 }
+      };
+    }
+  },
+
+  markAlertRead: async (alertId: string): Promise<any> => {
+    try {
+      const res = await fetch(`${API_BASE}/alerts/${alertId}/read`, {
+        method: 'POST',
+        headers: getAuthHeaders()
+      });
+      if (!res.ok) throw new Error('API error');
+      return await res.json();
+    } catch {
+      return { success: true };
+    }
+  },
+
+  markAllAlertsRead: async (): Promise<any> => {
+    try {
+      const res = await fetch(`${API_BASE}/alerts/mark-all-read`, {
+        method: 'POST',
+        headers: getAuthHeaders()
+      });
+      if (!res.ok) throw new Error('API error');
+      return await res.json();
+    } catch {
+      return { success: true };
+    }
+  },
+
+  // Auth API
+  login: async (username: string, password: string): Promise<{ access_token: string; user: any }> => {
+    const res = await fetch(`${API_BASE}/auth/login`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ username, password })
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(err.detail || 'Authentication failed. Please verify credentials.');
+    }
+    const data = await res.json();
+    if (data.access_token) {
+      localStorage.setItem('casesync_jwt_token', data.access_token);
+      localStorage.setItem('casesync_user', JSON.stringify(data.user));
+    }
+    return data;
+  },
+
+  getMe: async (): Promise<any> => {
+    try {
+      const res = await fetch(`${API_BASE}/auth/me`, { headers: getAuthHeaders() });
+      if (!res.ok) throw new Error('Not authenticated');
+      return await res.json();
+    } catch {
+      return null;
+    }
+  },
+
+  logout: () => {
+    localStorage.removeItem('casesync_jwt_token');
+    localStorage.removeItem('casesync_user');
+  },
+
+  getStoredToken: (): string | null => {
+    return localStorage.getItem('casesync_jwt_token');
+  },
+
+  getStoredUser: (): any | null => {
+    const raw = localStorage.getItem('casesync_user');
+    if (!raw) return null;
+    try {
+      return JSON.parse(raw);
+    } catch {
+      return null;
     }
   }
 };

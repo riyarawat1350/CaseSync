@@ -6,12 +6,25 @@ export interface ActionHistory {
   remarks: string;
 }
 
+export interface SupportingDocumentItem {
+  id: string;
+  case_id: string;
+  name: string;
+  size: number;
+  uploader: string;
+  bureau: string;
+  timestamp: string;
+  file_type?: string;
+  data_base64?: string;
+}
+
 export interface CaseItem {
   id: string;
   source_ref_no: string;
   institution_id: string;
   institution_name?: string;
   aicte_permanent_id?: string;
+  region?: string;
   submitted_name: string;
   category: string;
   category_name: string;
@@ -28,15 +41,33 @@ export interface CaseItem {
   sla_days: number;
   received_date?: string;
   due_date?: string;
+  expected_disposal_date?: string;
   days_elapsed?: number;
   days_remaining?: number;
   pct_elapsed?: number;
   sla_label?: string;
   sla_severity?: 'green' | 'amber' | 'red';
   last_action: string;
+  last_action_date?: string;
   next_action?: string;
+  is_duplicate?: boolean;
+  duplicate_of_id?: string;
+  linked_case_ids?: string[];
   actions_history?: ActionHistory[];
+  documents?: SupportingDocumentItem[];
   related_overlaps?: any[];
+}
+
+export interface AlertNotificationItem {
+  id: string;
+  category: 'DUPLICATE_OVERLAP' | 'PENDING_REMINDER' | 'ESCALATION' | 'SLA_ALERT';
+  title: string;
+  message: string;
+  severity: 'low' | 'medium' | 'high' | 'critical';
+  target_type: 'case' | 'overlap';
+  target_id: string;
+  created_at: string;
+  is_read: boolean;
 }
 
 export interface InstitutionItem {

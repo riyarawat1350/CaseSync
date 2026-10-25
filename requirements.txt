@@ -2,3 +2,7 @@ fastapi
 uvicorn
 pydantic
 rapidfuzz
+sqlalchemy
+pyjwt
+pg8000
+psycopg2-binary
